@@ -200,9 +200,6 @@ return [
         Collective\Html\HtmlServiceProvider::class,
         Milon\Barcode\BarcodeServiceProvider::class,
         Intervention\Image\ImageServiceProvider::class,
-        //Maatwebsite\Excel\ExcelServiceProvider::class,
-        Tymon\JWTAuth\Providers\LaravelServiceProvider::class,
-        Laravel\Passport\PassportServiceProvider::class,
     ],
 
     /*
@@ -222,9 +219,7 @@ return [
         'HTML' => Collective\Html\HtmlFacade::class,
         'Image' => Intervention\Image\Facades\Image::class,
         'DNS1D' => Milon\Barcode\Facades\DNS1DFacade::class,
-        'DNS2D' => Milon\Barcode\Facades\DNS2DFacade::class,
-        'JWTAuth' => Tymon\JWTAuth\Facades\JWTAuth::class,
-        'JWTFactory' => Tymon\JWTAuth\Facades\JWTFactory::class
+        'DNS2D' => Milon\Barcode\Facades\DNS2DFacade::class
     ])->toArray(),
 
 ];

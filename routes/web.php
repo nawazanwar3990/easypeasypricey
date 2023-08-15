@@ -3,9 +3,8 @@
 use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('shopify')->group(function () {
+//Routes for App Install
 
-    Route::get('home', [HomeController::class, 'home'])->name('shopify-home');
-    Route::get('install', [HomeController::class, 'install'])->name('shopify-install');
-    Route::get('token', [HomeController::class, 'token'])->name('shopify-token');
-});
+Route::get('shopify/home', [HomeController::class, 'home'])->name('home');
+Route::get('shopify/install', [HomeController::class, 'install'])->name('install');
+Route::get('shopify/token', [HomeController::class, 'token'])->name('token');

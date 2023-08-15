@@ -22,20 +22,21 @@ class HomeController extends Controller
     {
         $pageTitle = trans('general.orders');
         $shop = ShopService::getShop();
-        $orders  = ShopService::call($shop->token,$shop->domain,ShopifyEndpointEnum::ORDERS,MethodEnum::GET);
         if ($shop) {
-            return view('dashboard', compact('shop','pageTitle',compact('orders')));
+            $orders = ShopService::call($shop->token, $shop->domain, ShopifyEndpointEnum::ORDERS);
+            return view('dashboard', compact('shop', 'pageTitle', compact('orders')));
         } else {
             $domain = $request->query('shop');
             $hmac = $request->query('hmac');
             $timestamp = $request->query('timestamp');
-            return redirect()->route('shopify-install', [
+            return redirect()->route('install', [
                 'hmac' => $hmac,
                 'shop' => $domain,
                 'timestamp' => $timestamp
             ]);
         }
     }
+
     public function install(Request $request)
     {
         $domain = $request->query('shop', null);
@@ -46,33 +47,37 @@ class HomeController extends Controller
             'name' => $domain,
             'hmac' => $hmac
         ]);
-        $install_url = "https://" . $domain . "/admin/oauth/authorize?client_id=" . env("SHOPIFY_API_KEY") . "&scope=" . env("SHOPIFY_API_SCOPES") . "&redirect_uri=" . urlencode(route('shopify-token'));
+        $install_url = "https://" . $domain . "/admin/oauth/authorize?client_id=" . env("SHOPIFY_API_KEY") . "&scope=" . env("SHOPIFY_API_SCOPES") . "&redirect_uri=" . urlencode(env('SHOPIFY_API_REDIRECT_URL'));
         header("Location: " . $install_url);
         die();
     }
+
     public function token(Request $request)
     {
         $params = $_GET;
-        $hmac = $_GET['hmac'];
-        $code = $_GET['code'];
-        $params = array_diff_key($params, array('hmac' => ''));
-        ksort($params);
-        $computed_hmac = hash_hmac('sha256', http_build_query($params), env("SHOPIFY_API_SECRET"));
-        if (hash_equals($hmac, $computed_hmac)) {
-            $domain = $request->query('shop', null);
-            $result = $this->request($domain, $code);
-            Shop::where('domain', $domain)->update([
-                'token' => $result['access_token']
-            ]);
-
-            $shop = ShopService::getShopByDomainName($domain);
-            ShopService::syncShopData($shop);
-            $return_url = 'https://' . $domain . "/admin/apps/" . env("SHOPIFY_APP_NAME");
-            header("Location: " . $return_url);
-            die();
+        if (isset($params['code']) && isset($params['shop'])) {
+            $query = array(
+                "client_id" => env('SHOPIFY_API_KEY'),
+                "client_secret" => env('SHOPIFY_API_SECRET'),
+                "code" => $params['code']
+            );
+            $access_token_url = "https://" . $params['shop'] . "/admin/oauth/access_token?" . http_build_query($query);
+            $response = file_get_contents($access_token_url);
+            if ($response !== false) {
+                $result = json_decode($response, true);
+                if (isset($result['access_token'])) {
+                    $access_token = $result['access_token'];
+                    echo $access_token;
+                } else {
+                    echo "Access token not found in response.";
+                }
+            } else {
+                echo "Error fetching access token.";
+            }
         } else {
-            die('This request is NOT from Shopify!');
+            echo "Required parameters are missing.";
         }
+
     }
 
     public function request($shop, $code)
