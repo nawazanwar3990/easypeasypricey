@@ -18,13 +18,17 @@ class HomeController extends Controller
     {
     }
 
-    public function home(Request $request): View|Factory|RedirectResponse|Application
+    public function home(Request $request)
     {
         $pageTitle = trans('general.orders');
         $shop = ShopService::getShop();
         if ($shop) {
-            $orders  = ShopService::call($shop->token,$shop->domain,ShopifyEndpointEnum::ORDERS);
-            return view('dashboard', compact('shop','pageTitle',compact('orders')));
+            $orderRequest = ShopService::call($shop->token, $shop->domain, ShopifyEndpointEnum::ORDERS);
+            $orderResponse = json_decode($orderRequest['response'], JSON_PRETTY_PRINT);
+            if (isset($orderResponse['orders']) && count($orderResponse['orders']) > 0) {
+                $orders = $orderResponse['orders'];
+                return view('dashboard', compact('shop', 'pageTitle', 'orders'));
+            }
         } else {
             $domain = $request->query('shop');
             $hmac = $request->query('hmac');
@@ -36,6 +40,7 @@ class HomeController extends Controller
             ]);
         }
     }
+
     public function install(Request $request)
     {
         $domain = $request->query('shop', null);
@@ -46,10 +51,11 @@ class HomeController extends Controller
             'name' => $domain,
             'hmac' => $hmac
         ]);
-        $install_url = "https://" . $domain . "/admin/oauth/authorize?client_id=" . env("SHOPIFY_API_KEY") . "&scope=" . env("SHOPIFY_API_SCOPES") . "&redirect_uri=" .urlencode(env('SHOPIFY_API_REDIRECT_URL'));
+        $install_url = "https://" . $domain . "/admin/oauth/authorize?client_id=" . env("SHOPIFY_API_KEY") . "&scope=" . env("SHOPIFY_API_SCOPES") . "&redirect_uri=" . urlencode(env('SHOPIFY_API_REDIRECT_URL'));
         header("Location: " . $install_url);
         die();
     }
+
     public function token(Request $request)
     {
         $params = $_GET;
@@ -60,11 +66,23 @@ class HomeController extends Controller
         $computed_hmac = hash_hmac('sha256', http_build_query($params), env("SHOPIFY_API_SECRET"));
         if (hash_equals($hmac, $computed_hmac)) {
             $domain = $request->query('shop', null);
-            $result = $this->request($domain, $code);
+            $query = array(
+                "client_id" => env("SHOPIFY_API_KEY"),
+                "client_secret" => env("SHOPIFY_API_SECRET"),
+                "code" => $code
+            );
+            $access_token_url = "https://" . $domain . "/admin/oauth/access_token";
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_URL, $access_token_url);
+            curl_setopt($ch, CURLOPT_POST, count($query));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($query));
+            $response = curl_exec($ch);
+            curl_close($ch);
+            $result = json_decode($response, true);
             Shop::where('domain', $domain)->update([
                 'token' => $result['access_token']
             ]);
-
             $shop = ShopService::getShopByDomainName($domain);
             ShopService::syncShopData($shop);
             $return_url = 'https://' . $domain . "/admin/apps/" . env("SHOPIFY_APP_NAME");
@@ -77,19 +95,6 @@ class HomeController extends Controller
 
     public function request($shop, $code)
     {
-        $query = array(
-            "client_id" => env("SHOPIFY_API_KEY"),
-            "client_secret" => env("SHOPIFY_API_SECRET"),
-            "code" => $code
-        );
-        $access_token_url = "https://" . $shop . "/admin/oauth/access_token";
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_URL, $access_token_url);
-        curl_setopt($ch, CURLOPT_POST, count($query));
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($query));
-        $result = curl_exec($ch);
-        curl_close($ch);
-        return json_decode($result, true);
+
     }
 }

@@ -15,7 +15,7 @@ class ShopService
         $query = array(),
         $method = 'GET',
         $request_headers = array()
-    ): array|string
+    )
     {
         $url = "https://" . $shop . "/admin/api/" . env('SHOPIFY_API_VERSION') . "/" . $api_endpoint . ".json";
         if (!is_null($query) && in_array($method, array('GET', 'DELETE'))) $url = $url . "?" . http_build_query($query);
@@ -121,14 +121,12 @@ class ShopService
         return Shop::where('domain', $domain)->first();
     }
 
-    public static function syncShopData($shop)
+    public static function syncShopData($shop): void
     {
         $request = self::call(
             $shop->token,
             $shop->domain,
             ShopifyEndPointEnum::SHOP,
-            null,
-            MethodEnum::GET
         );
         $response = json_decode($request['response'], JSON_PRETTY_PRINT);
         if (isset($response['shop']) && count($response['shop']) > 0) {
@@ -165,5 +163,47 @@ class ShopService
             'store_created_at' => $shop['created_at'] ?? null,
             'store_updated_at' => $shop['updated_at'] ?? null,
         ]);
+    }
+
+    public static function makeGraphQlRequest($url, $token, $query)
+    {
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => $query,
+            CURLOPT_HTTPHEADER => array(
+                'x-shopify-access-token: ' . $token,
+                'Content-Type: application/json'
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+        return json_decode($response, true);
+    }
+
+    public static function beginOrderEdit($url, $token,$graphQlOrder)
+    {
+        $query = '{"query":"mutation {\\r\\n  orderEditBegin(id:\\"' . $graphQlOrder . '\\") {\\r\\n    calculatedOrder {\\r\\n      id\\r\\n      lineItems(first: 30) {\\r\\n        edges {\\r\\n          node {\\r\\n            id\\r\\n            quantity\\r\\n            variant {\\r\\n              sku\\r\\n              price\\r\\n              taxable\\r\\n              product {\\r\\n                productType\\r\\n                options {\\r\\n                  id\\r\\n                  name\\r\\n                  position\\r\\n                  values\\r\\n                }\\r\\n              }\\r\\n            }\\r\\n            customAttributes {\\r\\n              key\\r\\n              value\\r\\n            }\\r\\n          }\\r\\n        }\\r\\n      }\\r\\n    }\\r\\n  }\\r\\n}\\r\\n","variables":{}}';
+        return self::makeGraphQlRequest($url, $token, $query);
+    }
+
+    public static function setQuantity($url, $token, $calculatedOrderId, $calculatedItemId, $newQuantity)
+    {
+        $query = '{"query":"mutation increaseLineItemQuantity {\\r\\n  orderEditSetQuantity(id: \\"' . $calculatedOrderId . '\\", lineItemId: \\"' . $calculatedItemId . '\\", quantity:' . $newQuantity . ') {\\r\\n    calculatedOrder {\\r\\n      id\\r\\n      addedLineItems(first: 5) {\\r\\n        edges {\\r\\n          node {\\r\\n            id\\r\\n            quantity\\r\\n          }\\r\\n        }\\r\\n      }\\r\\n    }\\r\\n    userErrors {\\r\\n      field\\r\\n      message\\r\\n    }\\r\\n  }\\r\\n}\\r\\n","variables":{}}';
+        return self::makeGraphQlRequest($url, $token, $query);
+    }
+
+    public static function commitOrderEdit($url, $token, $calculatedOrderId)
+    {
+        $query = '{"query":"mutation commitEdit {\\r\\n  orderEditCommit(id: \\"' . $calculatedOrderId . '\\", notifyCustomer: false, staffNote: \\"I am Updated this Order\\") {\\r\\n    order {\\r\\n      id\\r\\n    }\\r\\n    userErrors {\\r\\n      field\\r\\n      message\\r\\n    }\\r\\n  }\\r\\n}","variables":{}}';
+        return self::makeGraphQlRequest($url, $token, $query);
     }
 }

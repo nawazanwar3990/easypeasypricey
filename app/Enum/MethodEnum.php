@@ -7,7 +7,9 @@ namespace App\Enum;
 
 class MethodEnum extends AbstractEnum
 {
-    public const GET = 'get';
+    public const GET = 'GET';
+    public const PUT = 'PUT';
+
     public static function getValues(): array
     {
         return [
